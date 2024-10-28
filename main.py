@@ -6,7 +6,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-import os
 import logging
 import time
 
@@ -19,7 +18,7 @@ API_TOKEN = '7368730334:AAH9xUG8G_Ro8mvV_fDQxd5ddkwjxHnBoeg'
 
 bot = telebot.TeleBot(API_TOKEN)
 
-def visit_temp_mail(option):
+def parse_site(option):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -31,50 +30,55 @@ def visit_temp_mail(option):
     
     try:
         if option == "create_email":
-            # Нажать кнопку "Создать новую почту"
-            button = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.header-btn.v-tooltip-open'))
+            # Ждем загрузки страницы и получаем текст
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
-            button.click()
-            time.sleep(2)  # Ожидание загрузки почты
-            
-            # Парсинг почты из input поля
-            email_element = driver.find_element(By.CSS_SELECTOR, 'input#email')
-            email = email_element.get_attribute("value")
-            logger.info(f"Сгенерирован новый адрес почты: {email}")
-            return f"Ваш новый почтовый адрес: {email}"
+            # Получаем текст из основного контейнера
+            main_content = driver.find_element(By.CSS_SELECTOR, ".container").text
+            logger.info("Получен текст из секции create_email")
+            return f"Текст из раздела создания почты:\n{main_content[:500]}..."  # Ограничиваем вывод
 
         elif option == "view_messages":
-            # Парсинг всех сообщений на странице
-            messages = driver.page_source
-            logger.info("Сообщения на странице успешно получены")
-            return messages[:1000]  # Ограничение на вывод текста
+            # Ждем загрузку и получаем текст из другой секции
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+            # Получаем текст из секции с сообщениями
+            messages_content = driver.find_element(By.CSS_SELECTOR, ".main-content").text
+            logger.info("Получен текст из секции view_messages")
+            return f"Текст из раздела сообщений:\n{messages_content[:500]}..."  # Ограничиваем вывод
 
     except Exception as e:
-        logger.error(f"Произошла ошибка: {str(e)}")
-        return "Произошла ошибка при взаимодействии с сайтом."
+        logger.error(f"Произошла ошибка при парсинге: {str(e)}")
+        return "Произошла ошибка при получении данных с сайта."
 
     finally:
         driver.quit()
 
-@bot.message_handler(commands=['tempmail'])
-def send_temp_mail_options(message):
+@bot.message_handler(commands=['start'])
+def send_options(message):
     markup = telebot.types.InlineKeyboardMarkup()
-    create_email_btn = telebot.types.InlineKeyboardButton("Создать новую почту", callback_data="create_email")
-    view_messages_btn = telebot.types.InlineKeyboardButton("Посмотреть сообщения в почте", callback_data="view_messages")
-    markup.add(create_email_btn, view_messages_btn)
+    btn1 = telebot.types.InlineKeyboardButton("Раздел 1", callback_data="create_email")
+    btn2 = telebot.types.InlineKeyboardButton("Раздел 2", callback_data="view_messages")
+    markup.add(btn1, btn2)
     
-    bot.send_message(message.chat.id, "Выберите действие:", reply_markup=markup)
+    bot.send_message(message.chat.id, "Выберите раздел для парсинга:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data in ["create_email", "view_messages"])
-def handle_temp_mail_option(call):
+def handle_query(call):
     bot.answer_callback_query(call.id)
     
-    if call.data == "create_email":
-        result = visit_temp_mail("create_email")
-    elif call.data == "view_messages":
-        result = visit_temp_mail("view_messages")
+    # Отправляем сообщение о начале парсинга
+    processing_msg = bot.send_message(call.message.chat.id, "Начинаем парсинг...")
     
+    # Выполняем парсинг
+    result = parse_site(call.data)
+    
+    # Удаляем сообщение о процессе
+    bot.delete_message(call.message.chat.id, processing_msg.message_id)
+    
+    # Отправляем результат
     bot.send_message(call.message.chat.id, result)
 
 bot.polling()
