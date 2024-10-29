@@ -7,6 +7,7 @@ import os
 import logging
 import time
 import random
+import re
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
 # Настройка логирования
@@ -118,6 +119,10 @@ def parse_email_messages(email):
 
         # Удаление лишних пробелов и пустых строк
         cleaned_messages = "\n".join([line.strip() for line in messages.splitlines() if line.strip()])
+        
+        # Ищем последние три последовательные цифры в тексте
+        numbers_pattern = r'\n1\n2\n3\n*$'
+        cleaned_messages = re.sub(numbers_pattern, '', cleaned_messages)
 
         return cleaned_messages if cleaned_messages else "Сообщений не найдено."
 
