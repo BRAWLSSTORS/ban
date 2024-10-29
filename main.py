@@ -3,25 +3,24 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import os
 import logging
 import time
 import random
+import re  # Для регулярных выражений
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Ваш API токен
+# Замените на ваш API токен
 API_TOKEN = '7368730334:AAH9xUG8G_Ro8mvV_fDQxd5ddkwjxHnBoeg'
+
 bot = telebot.TeleBot(API_TOKEN)
 
-def take_screenshot_and_get_email(url):
+def take_screenshot_and_extract_email(url):
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Запуск без интерфейса
+    chrome_options.add_argument("--headless")  # Открытие браузера в фоновом режиме
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument(
@@ -33,20 +32,18 @@ def take_screenshot_and_get_email(url):
     try:
         driver.get(url)
         logger.info(f"Загружена страница: {url}")
-
-        # Ожидание элемента с email (до 10 секунд)
-        email_element = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, 'input#email.email_input'))
-        )
-        email_title = email_element.get_attribute('title')
-        logger.info(f"Извлеченный email: {email_title}")
+        time.sleep(random.uniform(2, 5))  # Случайная задержка после загрузки страницы
 
         # Скриншот страницы
         screenshot_path = 'tempmail_screenshot.png'
         driver.save_screenshot(screenshot_path)
         logger.info("Скриншот сохранен")
 
-        return screenshot_path, email_title
+        # Парсинг текста на странице для поиска email
+        page_text = driver.find_element("tag name", "body").text
+        email = extract_email(page_text)
+
+        return screenshot_path, email
 
     except Exception as e:
         logger.error(f"Произошла ошибка: {str(e)}")
@@ -55,18 +52,28 @@ def take_screenshot_and_get_email(url):
     finally:
         driver.quit()
 
+def extract_email(text):
+    """Ищет email с символом '@' в тексте. Прекращает парсинг после пробела."""
+    match = re.search(r'\b[\w.-]+@[\w.-]+\b', text)  # Регулярное выражение для поиска email
+    if match:
+        return match.group(0)
+    return None
+
 @bot.message_handler(commands=['tempmail'])
 def handle_tempmail(message):
     url = "https://temp-mail.io/ru"
-    screenshot_path, email_title = take_screenshot_and_get_email(url)
+    screenshot_path, email = take_screenshot_and_extract_email(url)
 
-    if screenshot_path and email_title:
+    if screenshot_path:
         with open(screenshot_path, 'rb') as file:
             bot.send_photo(message.chat.id, file)
         os.remove(screenshot_path)
 
-        bot.send_message(message.chat.id, f"Ваш временный email: {email_title}")
+        if email:
+            bot.send_message(message.chat.id, f"Найден email: {email}")
+        else:
+            bot.send_message(message.chat.id, "Email не найден на странице.")
     else:
-        bot.reply_to(message, "Произошла ошибка при создании скриншота или получении email. Попробуйте снова.")
+        bot.reply_to(message, "Произошла ошибка при создании скриншота. Попробуйте снова.")
 
 bot.polling()
