@@ -3,6 +3,9 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import os
 import logging
 import time
@@ -12,14 +15,13 @@ import random
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Замените на ваш API токен
+# Ваш API токен
 API_TOKEN = '7368730334:AAH9xUG8G_Ro8mvV_fDQxd5ddkwjxHnBoeg'
-
 bot = telebot.TeleBot(API_TOKEN)
 
 def take_screenshot_and_get_email(url):
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Открытие браузера в фоновом режиме
+    chrome_options.add_argument("--headless")  # Запуск без интерфейса
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument(
@@ -31,10 +33,11 @@ def take_screenshot_and_get_email(url):
     try:
         driver.get(url)
         logger.info(f"Загружена страница: {url}")
-        time.sleep(random.uniform(2, 5))  # Случайная задержка
 
-        # Извлечение текста из атрибута title
-        email_element = driver.find_element('css selector', 'input#email[email_input]')
+        # Ожидание элемента с email (до 10 секунд)
+        email_element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'input#email.email_input'))
+        )
         email_title = email_element.get_attribute('title')
         logger.info(f"Извлеченный email: {email_title}")
 
