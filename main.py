@@ -164,10 +164,59 @@ def handle_tempmail(message):
     else:
         bot.reply_to(message, "Произошла ошибка при создании скриншота. Попробуйте снова.")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("parse_"))
+@bot.callback_query_handler(func=lambda call: call.data.startswith(("parse_", "back_to_menu_", "refresh_messages_")))
 def handle_parse_messages(call: CallbackQuery):
-    email = call.data.split("_", 1)[1]
-    messages = parse_email_messages(email)
-    bot.send_message(call.message.chat.id, f"{messages}")
+    action, email = call.data.split("_", 1)
+    
+    if action == "parse" or action == "refresh_messages":
+        # Получаем сообщения
+        messages = parse_email_messages(email)
+        
+        # Создаем новую клавиатуру с кнопками для обновления и возврата
+        keyboard = InlineKeyboardMarkup()
+        keyboard.add(
+            InlineKeyboardButton(
+                text="Посмотреть новые сообщения", 
+                callback_data=f"refresh_messages_{email}"
+            )
+        )
+        keyboard.add(
+            InlineKeyboardButton(
+                text="Вернуться в меню почты", 
+                callback_data=f"back_to_menu_{email}"
+            )
+        )
+        
+        # Обновляем существующее сообщение
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=messages,
+            reply_markup=keyboard
+        )
+        
+    elif action == "back_to_menu":
+        # Возвращаемся к начальному меню
+        response_text = (
+            f"Ваша временная почта: {email}\n\n"
+            "Вы можете использовать её для регистрации на любых сайтах или сервисах.\n"
+            "Вы можете управлять своим email кнопками ниже."
+        )
+        
+        # Создаем начальную клавиатуру
+        email_url = f"https://temp-mail.io/ru/email/{email}/token/2y9kMzVYoSeKGkteeXfK"
+        keyboard = InlineKeyboardMarkup()
+        keyboard.add(
+            InlineKeyboardButton(text="Перейти и посмотреть сообщения", url=email_url),
+            InlineKeyboardButton(text="Посмотреть сообщения в боте", callback_data=f"parse_{email}")
+        )
+        
+        # Обновляем существующее сообщение
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=response_text,
+            reply_markup=keyboard
+        )
 
 bot.polling()
