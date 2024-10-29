@@ -7,7 +7,6 @@ import os
 import logging
 import time
 import random
-import re  # Для регулярных выражений
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -32,16 +31,15 @@ def take_screenshot_and_extract_email(url):
     try:
         driver.get(url)
         logger.info(f"Загружена страница: {url}")
-        time.sleep(random.uniform(2, 5))  # Случайная задержка после загрузки страницы
+        time.sleep(random.uniform(2, 5))  # Случайная задержка
 
         # Скриншот страницы
         screenshot_path = 'tempmail_screenshot.png'
         driver.save_screenshot(screenshot_path)
         logger.info("Скриншот сохранен")
 
-        # Парсинг текста на странице для поиска email
-        page_text = driver.find_element("tag name", "body").text
-        email = extract_email(page_text)
+        # Попытка найти выделенный email
+        email = extract_selected_email(driver)
 
         return screenshot_path, email
 
@@ -52,11 +50,22 @@ def take_screenshot_and_extract_email(url):
     finally:
         driver.quit()
 
-def extract_email(text):
-    """Ищет email с символом '@' в тексте. Прекращает парсинг после пробела."""
-    match = re.search(r'\b[\w.-]+@[\w.-]+\b', text)  # Регулярное выражение для поиска email
-    if match:
-        return match.group(0)
+def extract_selected_email(driver):
+    """Ищет текст, который выделен на странице (или активный элемент)."""
+    try:
+        # Выполнение JavaScript для получения выделенного текста
+        email = driver.execute_script("return window.getSelection().toString();")
+        if email and "@" in email:
+            return email.strip()
+
+        # Альтернативная проверка активного элемента
+        active_element_text = driver.execute_script("return document.activeElement.textContent;")
+        if active_element_text and "@" in active_element_text:
+            return active_element_text.strip()
+
+    except Exception as e:
+        logger.error(f"Ошибка при поиске email: {str(e)}")
+
     return None
 
 @bot.message_handler(commands=['tempmail'])
@@ -72,7 +81,7 @@ def handle_tempmail(message):
         if email:
             bot.send_message(message.chat.id, f"Найден email: {email}")
         else:
-            bot.send_message(message.chat.id, "Email не найден на странице.")
+            bot.send_message(message.chat.id, "Не удалось найти выделенный email.")
     else:
         bot.reply_to(message, "Произошла ошибка при создании скриншота. Попробуйте снова.")
 
