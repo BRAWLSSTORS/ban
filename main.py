@@ -7,7 +7,7 @@ import os
 import logging
 import time
 import random
-from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
+from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -69,6 +69,31 @@ def extract_selected_email(driver):
 
     return None
 
+def parse_email_messages(email):
+    """Функция для парсинга сообщений с сайта temp-mail."""
+    url = f"https://temp-mail.io/ru/email/{email}/token/2y9kMzVYoSeKGkteeXfK"
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+
+    try:
+        driver.get(url)
+        time.sleep(random.uniform(2, 5))  # Задержка для загрузки контента
+
+        # Извлечение текста сообщений с помощью JavaScript
+        messages = driver.execute_script("return document.body.innerText;")
+        return messages.strip() if messages else "Сообщений не найдено."
+
+    except Exception as e:
+        logger.error(f"Ошибка при парсинге сообщений: {str(e)}")
+        return "Произошла ошибка при получении сообщений."
+
+    finally:
+        driver.quit()
+
 @bot.message_handler(commands=['tempmail'])
 def handle_tempmail(message):
     url = "https://temp-mail.io/ru"
@@ -86,16 +111,24 @@ def handle_tempmail(message):
                 "Вы можете управлять своим email кнопками ниже."
             )
 
-            # Создание инлайн-кнопки с ссылкой на почту
-            email_url = f"https://temp-mail.io/ru/email/{email}/token/2y9kMzVYoSeKGkteeXfK?utm_campaign=TempMailBot&utm_content=message_details&utm_medium=organic&utm_source=telegram-bot"
+            # Создание кнопок
+            email_url = f"https://temp-mail.io/ru/email/{email}/token/2y9kMzVYoSeKGkteeXfK"
             keyboard = InlineKeyboardMarkup()
-            button = InlineKeyboardButton(text="Просмотреть сообщения", url=email_url)
-            keyboard.add(button)
+            keyboard.add(
+                InlineKeyboardButton(text="Перейти и посмотреть сообщения", url=email_url),
+                InlineKeyboardButton(text="Посмотреть сообщения в боте", callback_data=f"parse_{email}")
+            )
 
             bot.send_message(message.chat.id, response_text, reply_markup=keyboard)
         else:
             bot.send_message(message.chat.id, "Не удалось найти выделенный email.")
     else:
         bot.reply_to(message, "Произошла ошибка при создании скриншота. Попробуйте снова.")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("parse_"))
+def handle_parse_messages(call: CallbackQuery):
+    email = call.data.split("_", 1)[1]
+    messages = parse_email_messages(email)
+    bot.send_message(call.message.chat.id, f"Сообщения для {email}:\n\n{messages}")
 
 bot.polling()
