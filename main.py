@@ -7,6 +7,7 @@ import os
 import logging
 import time
 import random
+import re  # Для регулярных выражений
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
 # Настройка логирования
@@ -20,7 +21,7 @@ bot = telebot.TeleBot(API_TOKEN)
 
 def take_screenshot_and_extract_email(url):
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Открытие браузера в фоновом режиме
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument(
@@ -32,34 +33,28 @@ def take_screenshot_and_extract_email(url):
     try:
         driver.get(url)
         logger.info(f"Загружена страница: {url}")
-        time.sleep(random.uniform(2, 5))  # Случайная задержка
+        time.sleep(random.uniform(2, 5))  # Задержка
 
-        # Скриншот страницы
         screenshot_path = 'tempmail_screenshot.png'
         driver.save_screenshot(screenshot_path)
         logger.info("Скриншот сохранен")
 
-        # Попытка найти выделенный email
         email = extract_selected_email(driver)
-
         return screenshot_path, email
 
     except Exception as e:
-        logger.error(f"Произошла ошибка: {str(e)}")
+        logger.error(f"Ошибка: {str(e)}")
         return None, None
 
     finally:
         driver.quit()
 
 def extract_selected_email(driver):
-    """Ищет текст, который выделен на странице (или активный элемент)."""
     try:
-        # Выполнение JavaScript для получения выделенного текста
         email = driver.execute_script("return window.getSelection().toString();")
         if email and "@" in email:
             return email.strip()
 
-        # Альтернативная проверка активного элемента
         active_element_text = driver.execute_script("return document.activeElement.textContent;")
         if active_element_text and "@" in active_element_text:
             return active_element_text.strip()
@@ -70,7 +65,6 @@ def extract_selected_email(driver):
     return None
 
 def parse_email_messages(email):
-    """Функция для парсинга сообщений с сайта temp-mail."""
     url = f"https://temp-mail.io/ru/email/{email}/token/2y9kMzVYoSeKGkteeXfK"
     chrome_options = Options()
     chrome_options.add_argument("--headless")
@@ -81,18 +75,31 @@ def parse_email_messages(email):
 
     try:
         driver.get(url)
-        time.sleep(random.uniform(2, 5))  # Задержка для загрузки контента
+        time.sleep(random.uniform(2, 5))
 
-        # Извлечение текста сообщений с помощью JavaScript
-        messages = driver.execute_script("return document.body.innerText;")
-        return messages.strip() if messages else "Сообщений не найдено."
+        # Извлекаем текст страницы
+        raw_text = driver.execute_script("return document.body.innerText;")
+        messages = clean_message_text(raw_text)
+        return messages or "Сообщений не найдено."
 
     except Exception as e:
-        logger.error(f"Ошибка при парсинге сообщений: {str(e)}")
+        logger.error(f"Ошибка при парсинге: {str(e)}")
         return "Произошла ошибка при получении сообщений."
 
     finally:
         driver.quit()
+
+def clean_message_text(text):
+    """Удаляет ненужные части текста с помощью регулярных выражений."""
+    unwanted_patterns = [
+        r"Ваш временный email.*?© temp-mail.io 2024",  # Удаляет основной блок инструкций
+        r"Мы используем собственные и сторонние cookie.*",  # Убирает текст о cookie
+        r"\b(Русский|English|Deutsch|Français|Türkçe|Espanol|中文|Italiano|Українська|فارسی|العربية|Bump)\b.*",  # Убирает языки и меню
+        r"\b(Меню|Блог|Расширения|Пожертвования|FAQ|Политика конфиденциальности|Условия использования|Контакты)\b.*"
+    ]
+    for pattern in unwanted_patterns:
+        text = re.sub(pattern, "", text, flags=re.DOTALL)
+    return text.strip()
 
 @bot.message_handler(commands=['tempmail'])
 def handle_tempmail(message):
@@ -111,7 +118,6 @@ def handle_tempmail(message):
                 "Вы можете управлять своим email кнопками ниже."
             )
 
-            # Создание кнопок
             email_url = f"https://temp-mail.io/ru/email/{email}/token/2y9kMzVYoSeKGkteeXfK"
             keyboard = InlineKeyboardMarkup()
             keyboard.add(
