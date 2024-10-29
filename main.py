@@ -7,6 +7,7 @@ import os
 import logging
 import time
 import random
+from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -79,7 +80,19 @@ def handle_tempmail(message):
         os.remove(screenshot_path)
 
         if email:
-            bot.send_message(message.chat.id, f"Найден email: {email}")
+            response_text = (
+                f"Ваша временная почта: {email}\n\n"
+                "Вы можете использовать её для регистрации на любых сайтах или сервисах.\n"
+                "Вы можете управлять своим email кнопками ниже."
+            )
+
+            # Создание инлайн-кнопки с ссылкой на почту
+            email_url = f"https://temp-mail.io/ru/email/{email}/token/2y9kMzVYoSeKGkteeXfK?utm_campaign=TempMailBot&utm_content=message_details&utm_medium=organic&utm_source=telegram-bot"
+            keyboard = InlineKeyboardMarkup()
+            button = InlineKeyboardButton(text="Просмотреть сообщения", url=email_url)
+            keyboard.add(button)
+
+            bot.send_message(message.chat.id, response_text, reply_markup=keyboard)
         else:
             bot.send_message(message.chat.id, "Не удалось найти выделенный email.")
     else:
